@@ -4,115 +4,122 @@ const { google } = require("googleapis");
 const fs = require("fs");
 const readline = require("readline");
 const multer = require("multer");
+const VideoAi = require("../../models/VideoAi/videoai");
 
+const OAuth2 = google.auth.OAuth2;
 const SCOPES = ["https://www.googleapis.com/auth/youtube.upload"];
-const TOKEN_PATH = "token.json";
+var TOKEN_DIR = "/Users/manhtruong/Downloads/Code/API/controllers/VideoAi";
+const TOKEN_PATH = TOKEN_DIR + "/token.json";
 
-// Xác thực và lấy token
-function authenticateAndUploadVideo(videoPath, title, description, callback) {
-    const credentials = require("./path-to-your-credentials.json");
-    const oauth2Client = new google.auth.OAuth2(
-        credentials.installed.client_id,
-        credentials.installed.client_secret,
-        credentials.installed.redirect_uris[0]
-    );
+const categoryIds = {
+    Entertainment: 24,
+    Education: 27,
+    ScienceTechnology: 28,
+};
 
-    // Đọc hoặc tạo file token cho xác thực
-    fs.readFile(TOKEN_PATH, (err, token) => {
+function authorize(credentials, callback) {
+    var clientSecret = credentials.web.client_secret;
+    var clientId = credentials.web.client_id;
+    var redirectUrl = credentials.web.redirect_uris[0];
+    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+    // Check if we have previously stored a token.
+    fs.readFile(TOKEN_PATH, function (err, token) {
         if (err) {
+            console.log(err);
             getNewToken(oauth2Client, callback);
         } else {
             oauth2Client.credentials = JSON.parse(token);
-            uploadVideo(oauth2Client, videoPath, title, description, callback);
+            callback(oauth2Client);
         }
     });
 }
-
-// Xác thực người dùng và lấy token mới nếu cần
 function getNewToken(oauth2Client, callback) {
-    const authUrl = oauth2Client.generateAuthUrl({
+    var authUrl = oauth2Client.generateAuthUrl({
         access_type: "offline",
         scope: SCOPES,
     });
-
-    console.log("Authorize this app by visiting this url:", authUrl);
-    const rl = readline.createInterface({
+    console.log("Authorize this app by visiting this url: ", authUrl);
+    var rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
     });
-
-    rl.question("Enter the code from that page here: ", (code) => {
+    rl.question("Enter the code from that page here: ", function (code) {
         rl.close();
-        oauth2Client.getToken(code, (err, token) => {
-            if (err)
-                return console.error(
-                    "Error while trying to retrieve access token",
-                    err
-                );
-
+        oauth2Client.getToken(code, function (err, token) {
+            if (err) {
+                console.log("Error while trying to retrieve access token", err);
+                return;
+            }
             oauth2Client.credentials = token;
+            console.log("Access token retrieved");
             storeToken(token);
-            uploadVideo(oauth2Client, videoPath, title, description, callback);
+            callback(oauth2Client);
         });
     });
 }
-
-// Lưu token vào file
 function storeToken(token) {
     try {
-        fs.mkdirSync("tokens");
+        fs.mkdirSync(TOKEN_DIR);
     } catch (err) {
-        if (err.code !== "EEXIST") {
+        if (err.code != "EEXIST") {
             throw err;
         }
     }
+    console.log(JSON.stringify(token));
     fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
-        if (err) return console.error(err);
-        console.log("Token stored to", TOKEN_PATH);
+        if (err) throw err;
+        console.log("Token stored to " + TOKEN_PATH);
     });
 }
-
-// Tải lên video lên YouTube
-function uploadVideo(oauth2Client, videoPath, title, description, callback) {
-    const youtube = google.youtube({
-        version: "v3",
-        auth: oauth2Client,
-    });
-
-    const videoMetadata = {
-        snippet: {
-            title: title,
-            description: description,
-        },
-        status: {
-            privacyStatus: "public", // Có thể sử dụng 'public' hoặc 'private'
-        },
-    };
-
-    const media = {
-        body: fs.createReadStream(videoPath),
-    };
-
-    youtube.videos.insert(
+async function getChannel(videoFilePath, auth) {
+    var service = google.youtube("v3");
+    service.videos.insert(
         {
+            auth: auth,
             part: "snippet,status",
-            media: media,
-            resource: videoMetadata,
+            requestBody: {
+                snippet: {
+                    title,
+                    description,
+                    categoryId: categoryIds.ScienceTechnology,
+                    defaultLanguage: "en",
+                    defaultAudioLanguage: "en",
+                },
+                status: {
+                    privacyStatus: "public",
+                },
+            },
+            media: {
+                body: fs.createReadStream(videoFilePath),
+            },
         },
-        (err, data) => {
+        function (err, response) {
             if (err) {
-                console.error("Error uploading video:", err);
-                return callback(err, null);
+                console.log("The API returned an error: " + err);
+                return;
             }
+            console.log(response.data);
 
-            console.log("Video uploaded to YouTube:", data.data.snippet.title);
-            callback(null, data.data);
+            console.log("Video uploaded. Uploading the thumbnail now.");
+            // service.thumbnails.set(
+            //     {
+            //         auth: auth,
+            //         videoId: response.data.id,
+            //         media: {
+            //             body: fs.createReadStream(thumbFilePath),
+            //         },
+            //     },
+            //     function (err, response) {
+            //         if (err) {
+            //             console.log("The API returned an error: " + err);
+            //             return;
+            //         }
+            //         console.log(response.data);
+            //     }
+            // );
         }
     );
 }
-
-// Sử dụng hàm để tải lên video
-const videoPath = "path-to-your-video.mp4";
 const title = "Your Video Title";
 const description = "Your video description";
 const storageAvatarForm = (destination) => {
@@ -134,7 +141,7 @@ const storageAvatarForm = (destination) => {
             cb(null, formDestination);
         },
         fileFilter: function (req, file, cb) {
-            const allowedTypes = ["video/webm"];
+            const allowedTypes = ["mp4"];
             if (allowedTypes.includes(file.mimetype)) {
                 cb(null, true);
             } else {
@@ -143,76 +150,46 @@ const storageAvatarForm = (destination) => {
         },
         filename: function (req, file, cb) {
             const uniqueSuffix = req.body.video_id;
-            cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
+            // cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
+            cb(null, uniqueSuffix + "." + "mp4");
         },
     });
 };
 exports.update = multer({
     storage: storageAvatarForm(`${process.env.storage_tv365}/video/videoai`),
 }).single("file");
-
-exports.handeUpdate = async (req, res) => {
+exports.handeUpdate = (req, res, tags) => {
     try {
         const video_id = req.body.video_id;
         const video = req.file;
-        console.log(video);
-        if (video && video_id) {
-            // authenticateAndUploadVideo(
-            //     videoPath,
-            //     title,
-            //     description,
-            //     (err, response) => {
-            //         if (err) {
-            //             console.error("Error:", err);
-            //         } else {
-            //             console.log("Video uploaded:", response);
-            //         }
-            //     }
-            // );
-            res.status(200).send({
-                data: [],
-            });
-        }
-    } catch (error) {
-        return functions.setError(res, error.message);
-    }
-};
-
-exports.getBlog = async (req, res, next) => {
-    try {
-        const page = req.body.page;
-        const news_id = req.body.news_id;
-
-        const from = new FormData();
-        from.append("news_id", news_id);
-        from.append("page", page);
-        const resp = await axios.post(
-            "https://work247.vn/api/list_news_ai.php",
-            from
+        fs.readFile(
+            "/Users/manhtruong/Downloads/Code/API/controllers/VideoAi/ggapi.json",
+            function processClientSecrets(err, content) {
+                if (err) {
+                    console.log("Error loading client secret file: " + err);
+                    return;
+                }
+                // Authorize a client with the loaded credentials, then call the YouTube API.
+                authorize(JSON.parse(content), (auth) =>
+                    getChannel(video.path, auth)
+                );
+            }
         );
-        const audioUrl = resp.data.news[0].news_audio[0];
-
-        const audio = await axios.get(audioUrl);
-        console.log(audio.data);
-        const newData = resp.data.news[0];
-        newData.news_audio = audio.data;
-        if (resp.data.result) {
-            res.status(200).send({
-                data: newData,
-            });
-        }
-    } catch (error) {
+        res.status(200).send({
+            data: [],
+        });
+    } catch (err) {
         return functions.setError(res, error.message);
     }
 };
+
 exports.getListBlogAll = async (req, res, next) => {
     try {
         const page = req.body.page;
         const news_id = req.body.news_id;
-
         const from = new FormData();
-        from.append("news_id", news_id);
-        from.append("page", page);
+        news_id && from.append("news_id", news_id);
+        page && from.append("page", page);
         const resp = await axios.post(
             "https://work247.vn/api/list_news_ai.php",
             from
@@ -226,3 +203,36 @@ exports.getListBlogAll = async (req, res, next) => {
         return functions.setError(res, error.message);
     }
 };
+async function create(data) {
+    try {
+        const page = req.body.page;
+        const news_id = req.body.news_id;
+        const video_id = await VideoAi.find();
+        const { dep_name, manager_id, dep_order } = data.body;
+
+        const foundGateway = await VideoAi.findOne({
+            com_id,
+            dep_name
+        })
+        if (foundGateway) {
+            return functions.setError(res, "Tên phòng ban đã tồn tại", 504);
+        }
+        let maxID = await VideoAi.findOne({}, {}, { sort: { dep_id: -1 } }).lean() || 0;
+        const video = new VideoAi({
+            id: Number(maxID.dep_id) + 1 || 1,
+            id_blog: com_id,
+            id_youtube: dep_name,
+            title: manager_id,
+            description: Date.parse(now),
+            link_blog: dep_order || 0,
+            link_youtube:,
+            link_server,
+            status_server:
+        });
+
+        await video.save();
+        return functions.success(res, "Tạo thành công", { video });
+    } catch (error) {
+        return functions.setError(res, error.message);
+    }
+}

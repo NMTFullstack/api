@@ -1,12 +1,11 @@
 const router = require("express").Router();
 const formData = require("express-form-data");
 const controller = require("../../controllers/VideoAi/UpdateVideo");
-// const multer = require("multer");
-// const upload = multer({ storage });
 router.post("/getListBlogWork247", controller.getListBlogWork247);
 router.post("/getListBlogTimViec", controller.getListBlogTimViec);
-router.post("/listAllFilter", controller.listAllFilter);
+router.post("/listAllFilter", formData.parse(), controller.listAllFilter);
 router.post("/getTokenYoutube", controller.getTokenYoutube);
-router.post("/updateVideo", controller.update, controller.handeUpdate);
+router.post("/updateVideo", controller.update, controller.updateVideo);
+router.post("/uploadStore", controller.update, controller.uploadStore);
 router.post("/updateTokenYoutube", controller.updateTokenYoutube);
 module.exports = router;

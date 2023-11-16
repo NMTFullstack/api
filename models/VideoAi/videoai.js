@@ -9,7 +9,7 @@ const video_ai_Schema = new mongoose.Schema(
             type: Number,
         },
         id_youtube: {
-            type: Number,
+            type: String,
         },
         title: {
             type: String,
@@ -21,9 +21,6 @@ const video_ai_Schema = new mongoose.Schema(
             type: String,
         },
         link_youtube: {
-            type: String,
-        },
-        link_server: {
             type: String,
         },
         status_server: {

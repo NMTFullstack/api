@@ -8,6 +8,12 @@ const video_ai_Schema = new mongoose.Schema(
         id_blog: {
             type: Number,
         },
+        type: {
+            type: String,
+        },
+        com_name: {
+            type: String,
+        },
         id_youtube: {
             type: String,
         },

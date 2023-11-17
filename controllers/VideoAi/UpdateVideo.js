@@ -166,6 +166,7 @@ async function getChannel(
             }
             console.log(response.data);
             const videoId = response.data.id;
+            console.log("uploading video " + videoId);
             const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
             await VideoAi.updateOne(
                 { id_blog: id_blog },
@@ -199,7 +200,7 @@ const storageAvatarForm = (destination) => {
             cb(null, formDestination);
         },
         fileFilter: function (req, file, cb) {
-            const allowedTypes = ["video/mp4"];
+            const allowedTypes = ["video/webm"];
             if (allowedTypes.includes(file.mimetype)) {
                 cb(null, true);
             } else {
@@ -209,7 +210,7 @@ const storageAvatarForm = (destination) => {
         filename: function (req, file, cb) {
             const uniqueSuffix = req.body.title;
             // cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
-            cb(null, uniqueSuffix + "." + "mp4");
+            cb(null, uniqueSuffix + "." + "webm");
         },
     });
 };
@@ -221,6 +222,10 @@ exports.updateVideo = async (req, res) => {
     try {
         const video = req.file;
         const description = req.body.des;
+        const type = req.body.type;
+        const com_name = req.body.com_name;
+        console.log(type);
+        console.log(com_name);
         const title = req.body.title;
         const link_blog = req.body.link_blog;
         const id_blog = Number(req.body.id_blog);
@@ -235,6 +240,8 @@ exports.updateVideo = async (req, res) => {
                 description: description,
                 link_blog: link_blog,
                 link_youtube: newPath,
+                com_name: com_name,
+                type: type,
             };
             authorize(credentialsObject, async (auth) => {
                 await getChannel(
@@ -261,19 +268,7 @@ exports.updateVideo = async (req, res) => {
         return functions.setError(res, err.message);
     }
 };
-// async function unloadYoutube() {
-//     authorize(credentialsObject, async (auth) => {
-//         await getChannel(
-//             video.path,
-//             auth,
-//             link_blog,
-//             id_blog,
-//             title,
-//             description,
-//             res
-//         );
-//     });
-// }
+
 async function create({
     id_blog,
     id_youtube,
@@ -282,6 +277,8 @@ async function create({
     link_blog,
     link_youtube,
     link_server,
+    type,
+    com_name,
 }) {
     try {
         let maxID =
@@ -296,6 +293,8 @@ async function create({
             link_youtube: link_youtube,
             link_server: link_server,
             status_server: 1,
+            type: type,
+            com_name: com_name,
         });
         await video.save();
         return video;
@@ -347,8 +346,8 @@ exports.getListBlogTimViec = async (req, res, next) => {
         const news_id = req.body.news_id;
         const type = req.body.type;
         const from = new FormData();
-        console.log(type);
-        news_id && from.append("news_id", news_id);
+
+        news_id && from.append("newId", news_id);
         page && from.append("page", page);
         pageSize && from.append("pageSize", pageSize);
         let resp;
@@ -438,10 +437,14 @@ exports.updateTokenYoutube = async (req, res, next) => {
 exports.listAllFilter = async (req, res) => {
     try {
         let id_blog = req.body.id_blog;
+        let type = req.body.type;
+        let com_name = req.body.com_name;
         let resp;
         if (id_blog) {
             resp = await VideoAi.findOne({
                 id_blog: id_blog,
+                type: type,
+                com_name: com_name,
             });
         } else {
             resp = await VideoAi.find({});

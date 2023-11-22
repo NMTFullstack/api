@@ -29,7 +29,7 @@ const credentialsObject = {
         auth_provider_x509_cert_url:
             "https://www.googleapis.com/oauth2/v1/certs",
         client_secret: "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",
-        redirect_uris: ["http://localhost:3000/admin/quan-ly-video/getToken"],
+        redirect_uris: ["http://localhost:3000/getToken"],
     },
 };
 
@@ -91,96 +91,6 @@ exports.uploadStore = async (req, res, next) => {
     });
 };
 
-function authorize(credentials, callback) {
-    var clientSecret = credentials.web.client_secret;
-    var clientId = credentials.web.client_id;
-    var redirectUrl = credentials.web.redirect_uris[0];
-    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-    // Check if we have previously stored a token.
-    fs.readFile(TOKEN_PATH, function (err, token) {
-        console.log(token);
-        oauth2Client.credentials = JSON.parse(token);
-        callback(oauth2Client);
-    });
-}
-
-async function getChannel(
-    videoFilePath,
-    auth,
-    link_blog,
-    id_blog,
-    title,
-    description,
-    res
-) {
-    var service = google.youtube("v3");
-    service.videos.insert(
-        {
-            auth: auth,
-            part: "snippet,status",
-            requestBody: {
-                snippet: {
-                    title,
-                    description,
-                    categoryId: categoryIds.ScienceTechnology,
-                    defaultLanguage: "vi",
-                    defaultAudioLanguage: "vi",
-                },
-                status: {
-                    privacyStatus: "public",
-                },
-            },
-            media: {
-                body: fs.createReadStream(videoFilePath),
-            },
-        },
-        // function (err, response) {
-        //     if (err) {
-        //         console.log("The API returned an error: " + err);
-        //         return;
-        //     }
-        //     console.log(response.data);
-
-        //     console.log("Video uploaded. Uploading the thumbnail now.");
-        //     // service.thumbnails.set(
-        //     //     {
-        //     //         auth: auth,
-        //     //         videoId: response.data.id,
-        //     //         media: {
-        //     //             body: fs.createReadStream(thumbFilePath),
-        //     //         },
-        //     //     },
-        //     //     function (err, response) {
-        //     //         if (err) {
-        //     //             console.log("The API returned an error: " + err);
-        //     //             return;
-        //     //         }
-        //     //         console.log(response.data);
-        //     //     }
-        //     // );
-        // }
-        async function (err, response) {
-            if (err) {
-                console.log("The API returned an error: " + err);
-                return functions.setError(res, "That bai" + err);
-            }
-            console.log(response.data);
-            const videoId = response.data.id;
-            console.log("uploading video " + videoId);
-            const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
-            await VideoAi.updateOne(
-                { id_blog: id_blog },
-                {
-                    link_youtube: videoLink,
-                    id_youtube: videoId,
-                }
-            );
-            fs.unlink(videoFilePath, (err) => {
-                if (err) throw err;
-            });
-        }
-    );
-}
 const storageAvatarForm = (destination) => {
     return multer.diskStorage({
         destination: function (req, file, cb) {
@@ -208,7 +118,7 @@ const storageAvatarForm = (destination) => {
             }
         },
         filename: function (req, file, cb) {
-            const uniqueSuffix = req.body.title;
+            const uniqueSuffix = req.body.id_blog;
             // cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
             cb(null, uniqueSuffix + "." + "webm");
         },
@@ -239,23 +149,26 @@ exports.updateVideo = async (req, res) => {
                 title: title,
                 description: description,
                 link_blog: link_blog,
-                link_youtube: newPath,
+                link_server: video.path,
+                link_youtube: "",
                 com_name: com_name,
                 type: type,
+                status_server: 0,
             };
-            authorize(credentialsObject, async (auth) => {
-                await getChannel(
-                    video.path,
-                    auth,
-                    link_blog,
-                    id_blog,
-                    title,
-                    description,
-                    res
-                );
-            });
+            // authorize(credentialsObject, async (auth) => {
+            //     await getChannel(
+            //         video.path,
+            //         auth,
+            //         link_blog,
+            //         id_blog,
+            //         title,
+            //         description,
+            //         res
+            //     );
+            // });
             // Create a new entry in the VideoAi model
             const video_create = await create(videoInfo);
+
             if (video_create) {
                 functions.success(res, "Tạo thành công", {
                     video_create,
@@ -268,7 +181,51 @@ exports.updateVideo = async (req, res) => {
         return functions.setError(res, err.message);
     }
 };
-
+exports.editVideo = async (req, res) => {
+    try {
+        let { id_blog, link_youtube, id_youtube, id } = req.body;
+        await VideoAi.updateOne(
+            { id: id },
+            {
+                link_youtube: link_youtube,
+                id_youtube: id_youtube,
+                status_server: 1,
+                id_blog: id_blog,
+            }
+        );
+        return functions.success(res, {
+            message: "update thành công",
+        });
+    } catch (err) {
+        return functions.setError(res, err.message);
+    }
+};
+exports.deleteVideo = async (req, res) => {
+    try {
+        let id_blog = req.body.id_blog;
+        let type = req.body.type;
+        let com_name = req.body.com_name;
+        // let videoFilePath = await VideoAi.findOne({
+        //     id_blog: id_blog,
+        //     type: type,
+        //     com_name: com_name,
+        // });
+        // const newPath = videoFilePath.link_youtube.replace(
+        //     "https://api.timviec365.vn",
+        //     "../storage/base365"
+        // );
+        await VideoAi.deleteOne({
+            id_blog: id_blog,
+            type: type,
+            com_name: com_name,
+        });
+        return functions.success(res, {
+            message: "Xoá thành công",
+        });
+    } catch (err) {
+        return functions.setError(res, err.message);
+    }
+};
 async function create({
     id_blog,
     id_youtube,
@@ -277,6 +234,7 @@ async function create({
     link_blog,
     link_youtube,
     link_server,
+    status_server,
     type,
     com_name,
 }) {
@@ -292,7 +250,7 @@ async function create({
             link_blog: link_blog,
             link_youtube: link_youtube,
             link_server: link_server,
-            status_server: 1,
+            status_server: status_server,
             type: type,
             com_name: com_name,
         });
@@ -420,6 +378,7 @@ function storeToken(token) {
 exports.updateTokenYoutube = async (req, res, next) => {
     try {
         const code = req.body.token;
+        console.log(JSON.stringify(code));
         var clientSecret = credentialsObject.web.client_secret;
         var clientId = credentialsObject.web.client_id;
         var redirectUrl = credentialsObject.web.redirect_uris[0];
@@ -455,6 +414,139 @@ exports.listAllFilter = async (req, res) => {
                 data: resp,
             },
         });
+    } catch (err) {
+        return functions.setError(res, error.message);
+    }
+};
+
+function authorize(credentials, callback) {
+    var clientSecret = credentials.web.client_secret;
+    var clientId = credentials.web.client_id;
+    var redirectUrl = credentials.web.redirect_uris[0];
+    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+    // Check if we have previously stored a token.
+    fs.readFile(TOKEN_PATH, function (err, token) {
+        console.log(token);
+        oauth2Client.credentials = JSON.parse(token);
+        callback(oauth2Client);
+    });
+}
+
+async function getChannel(
+    videoFilePath,
+    auth,
+    link_blog,
+    id_blog,
+    title,
+    description,
+    id,
+    res
+) {
+    var service = google.youtube("v3");
+    service.videos.insert(
+        {
+            auth: auth,
+            part: "snippet,status",
+            requestBody: {
+                snippet: {
+                    title,
+                    description,
+                    categoryId: categoryIds.ScienceTechnology,
+                    defaultLanguage: "vi",
+                    defaultAudioLanguage: "vi",
+                },
+                status: {
+                    privacyStatus: "public",
+                },
+            },
+            media: {
+                body: fs.createReadStream(videoFilePath),
+            },
+        },
+        // function (err, response) {
+        //     if (err) {
+        //         console.log("The API returned an error: " + err);
+        //         return;
+        //     }
+        //     console.log(response.data);
+
+        //     console.log("Video uploaded. Uploading the thumbnail now.");
+        //     // service.thumbnails.set(
+        //     //     {
+        //     //         auth: auth,
+        //     //         videoId: response.data.id,
+        //     //         media: {
+        //     //             body: fs.createReadStream(thumbFilePath),
+        //     //         },
+        //     //     },
+        //     //     function (err, response) {
+        //     //         if (err) {
+        //     //             console.log("The API returned an error: " + err);
+        //     //             return;
+        //     //         }
+        //     //         console.log(response.data);
+        //     //     }
+        //     // );
+        // }
+        async function (err, response) {
+            if (err) {
+                console.log("The API returned an error: " + err);
+                return functions.setError(res, "That bai" + err);
+            }
+            console.log(response.data);
+            const videoId = response.data.id;
+            console.log("uploading video " + videoId);
+            const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
+            await VideoAi.updateOne(
+                { id: id },
+                {
+                    link_youtube: videoLink,
+                    id_youtube: videoId,
+                    status_server: 1,
+                    link_server: "",
+                }
+            );
+            fs.unlink(videoFilePath, (err) => {
+                if (err) throw err;
+            });
+            res.status(200).send({
+                data: {
+                    result: true,
+                    message: "Uploading video successfully",
+                },
+            });
+        }
+    );
+}
+
+exports.uploadYoutube = async (req, res) => {
+    try {
+        let { id_blog, type, com_name, title, description } = req.body;
+
+        let resp = await VideoAi.findOne({
+            id_blog: id_blog,
+            type: type,
+            com_name: com_name,
+        });
+        console.log(resp);
+        if (resp) {
+            authorize(credentialsObject, async (auth) => {
+                await getChannel(
+                    resp.link_server,
+                    auth,
+                    resp.link_blog,
+                    resp.id_blog,
+                    title,
+                    description,
+                    resp.id,
+                    res
+                );
+            });
+        } else {
+            return functions.setError(res, {
+                message: "Couldn't find id_blog",
+            });
+        }
     } catch (err) {
         return functions.setError(res, error.message);
     }

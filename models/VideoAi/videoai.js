@@ -29,6 +29,9 @@ const video_ai_Schema = new mongoose.Schema(
         link_youtube: {
             type: String,
         },
+        link_server: {
+            type: String,
+        },
         status_server: {
             type: Number,
         },

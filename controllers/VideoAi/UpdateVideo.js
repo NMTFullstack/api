@@ -1,703 +1,275 @@
 const functions = require("../../services/functions");
 const { default: axios } = require("axios");
-const { google } = require("googleapis");
 const fs = require("fs");
-const readline = require("readline");
 const multer = require("multer");
 const VideoAi = require("../../models/VideoAi/videoai");
 const FormData = require("form-data");
-const { initializeApp } = require("firebase/app");
-const { getStorage, ref, uploadBytesResumable } = require("firebase/storage");
-const { TwitterApi } = require("twitter-api-v2");
-const OAuth2 = google.auth.OAuth2;
-const SCOPES = ["https://www.googleapis.com/auth/youtube.upload"];
-var TOKEN_DIR = process.env.storage_tv365 + "/video/videoai";
-const TOKEN_PATH = TOKEN_DIR + "/token.json";
-const TOKEN_PATH_TV = TOKEN_DIR + "/token_tv.json";
 
 // type = 1 work247 , 2: timviec
 
-const categoryIds = {
-    Entertainment: 24,
-    Education: 27,
-    ScienceTechnology: 28,
-};
-const credentialsObject = {
-    web: {
-        client_id:
-            "107099070730-flcu1l4632rjdpr0relqlv0j33qd5nd5.apps.googleusercontent.com",
-        project_id: "update-youtube-405003",
-        auth_uri: "https://accounts.google.com/o/oauth2/auth",
-        token_uri: "https://oauth2.googleapis.com/token",
-        auth_provider_x509_cert_url:
-            "https://www.googleapis.com/oauth2/v1/certs",
-        client_secret: "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",
-        redirect_uris: [
-            "http://localhost:3000/getToken",
-            "http://localhost:3000/getTokenWork",
-        ],
-        javascript_origins: [
-            "http://localhost",
-            "http://localhost:5000",
-            "https://update--405003.firebaseapp.com",
-        ],
-    },
-};
-exports.getTokenYoutube = async (req, res, next) => {
-    let type = req.body.type;
-    let clientSecret = credentialsObject.web.client_secret;
-    let clientId = credentialsObject.web.client_id;
-    let redirectUrl = "";
-    if (type == 2) {
-        redirectUrl = credentialsObject.web.redirect_uris[0];
-    } else if (type == 1) {
-        redirectUrl = credentialsObject.web.redirect_uris[1];
-    }
-    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-    const authUrl = oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        scope: SCOPES,
-    });
-    res.status(200).send({
-        data: {
-            url: authUrl,
-        },
-    });
-};
-
-function getNewToken(oauth2Client, code, type) {
-    oauth2Client.getToken(code, function (err, token) {
-        if (err) {
-            console.log("Error while trying to retrieve access token", err);
-            return;
-        }
-        oauth2Client.credentials = token;
-        storeToken(token, type);
-    });
-}
-function storeToken(token, type) {
-    try {
-        fs.mkdirSync(TOKEN_DIR);
-    } catch (err) {
-        if (err.code != "EEXIST") {
-            return null;
-        }
-    }
-    console.log(JSON.stringify(token));
-    console.log(type);
-    if (type == 2) {
-        fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
-            if (err) throw err;
-            console.log("Token stored to " + TOKEN_PATH);
-        });
-    } else if (type == 1) {
-        fs.writeFile(TOKEN_PATH_TV, JSON.stringify(token), (err) => {
-            if (err) throw err;
-            console.log("Token stored to " + TOKEN_PATH_TV);
-        });
-    }
-}
-exports.updateTokenYoutube = async (req, res, next) => {
-    try {
-        const { code, type } = req.body;
-        let clientSecret = credentialsObject.web.client_secret;
-        let clientId = credentialsObject.web.client_id;
-        let redirectUrl = "";
-        if (type == 2) {
-            redirectUrl = credentialsObject.web.redirect_uris[0];
-        } else if (type == 1) {
-            redirectUrl = credentialsObject.web.redirect_uris[1];
-        }
-        console.log(JSON.stringify(code));
-
-        var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-        await getNewToken(oauth2Client, code, type);
-        res.status(200).send({
-            data: {
-                result: true,
-            },
-        });
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
-};
-const firebaseConfig = {
-    type: "service_account",
-    project_id: "auto-upload-video-b0e84",
-    private_key_id: "131ef332a2b9550460305626288d766f12f3043f",
-    private_key:
-        "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7ecfDX+1fW/KQ\n+dSPzdxXhhSQAdDC7BEL7hCnJDahPLD1VCNC2rnMXNWknkbxkJN1lBN4NNSvfheG\nux7TsBIEtLxt+N/BGCUM0OX1zBh6VIHYtHw+Njc6oBeAZe5sG4m5SLQOhw/ZQ1xH\nU77TvueRDTrXyETTUop6MPpjasb28RmujLkInZsFWqwdW3VjM0XG2gXG8VVl60jX\nfO5Rh/T6w6+f0eCyTxM/Iy8sjf909yDYeKEK5wha8HsnYFpLU0ErgkzCeMQUwJ+G\n4m5fyHPParhp25YUEtYQNfPdYATmyT0PBY4vH29VF/biTwJsEE7CKeXlf5e1psuP\nx1wsVbJzAgMBAAECggEAGToMhLW7yJZ5esNOCau3IpqK2cs6FCs/1U3Liod3nRVV\nmoLKhox4GTpvZR9chyo1LXUndDK9C9WjxMrDyH3AxEattFPw3ULVJCGtT/iOsqdR\nxvSXuKdYTIM4+7C7ocBy39kbTCPQdiPM9FbIhCWuyKNHGmd7G2nX8xP0HWdDg/w3\njpYZ/iGsdm1wDnXoR2ud8lMeKlMRbegsbgU281CchMeclyM6GU63Sv544O+B+bCr\nXgU1wJdZHdVJ+LkKTx9sHG7i6/M5D5QdZoIRop4YNBshM1RQL00Bn3t8Poo2TDhg\naVP6h+ibe7aHsinUygahuP8szcoCPkorGgS4O9NcAQKBgQDvmERq3cQC8iHZl16n\n9ZAx/paT6hzaR8qedRFtDrIbljrsVmqz7bFoKInQWFbG6AYuOBk7ziynZonZNaQS\nyBS5mZH/yEr2HkI0xxCFVHZITIylNO5pDR+EnrobPrCPVSfJkhfaA4RXYSOr78tq\nXTvsbV4A40TE4VPhx0Gno67ZwQKBgQDIT/HR4Fnd+Ysno+1vJCNFE2YwNua371MR\n76X2D0q+1sBN95WV/ldcd0YKY+FdSUi9j2cawPQn1FJHbjQGQAAyYgLl8AOzt2hx\nQM2SNQ270eKkoV/z3rNZcPLMBTkcg4C59d9s6pECTp9F+Qy4YaNZ53cdh6T0L2L5\ndCYdLaqRMwKBgQCtM1XCKy5XMtJliZdTs6DZg0E3DDZvVRaUFezS+ZyndKKD1rSr\n/VgSA7wccL/KalCNeOBE63Y8TVO5QZ2qNhlFUk7IqPIHmTgjDwRSXgxjl3LUur7e\nEi6GoHfI2jioZNauUH4NjB1PTVmMIXzbFysKbsVVvvUnnfwVawV7OkhcAQKBgQCN\n6xYI/EqvWf2dOCcgdxoF9piP0FXmO0k/i+qpSmxKiRv2IVN50ZlTia217s3cqe8/\nXjpOWiahkWw573osc2uwRoCHKGV3DpqQorkCvVPdnfZVbX/t5/ppg/yBT7IG4aRy\nHCEPqaDTYaC2kpzQhVyWdceOxGu6FViqJABc693MwQKBgE0lhaegA8s5tvKNQMFE\nSwPAodcTk3RYnV+J+DV/QaQQNyme+TBpxMR/It4eWbYdh+IgjCHni/1JaqSxU3+c\n7DMJppdAJEfZBD6oFprKsPQ4Olk1I0ocJTa1SXagrglfFjg4Mlr4wXNRaRpTOU2t\nNm01hRUjV8csFlSxTqJ+0ZC2\n-----END PRIVATE KEY-----\n",
-    client_email:
-        "firebase-adminsdk-hncyf@auto-upload-video-b0e84.iam.gserviceaccount.com",
-    client_id: "102076085306212388939",
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    token_uri: "https://oauth2.googleapis.com/token",
-    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-    client_x509_cert_url:
-        "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-hncyf%40auto-upload-video-b0e84.iam.gserviceaccount.com",
-    universe_domain: "googleapis.com",
-    storageBucket: "",
-};
-
-const twitterConfig = {
-    API_KEY: "UAfpQ4iU3d2bPOrIWcHieKnWK",
-    API_SECRET: "MOhxnWDFZ4gS19yIOWP8dSi7CpepOnQMJFZEq4uPVb6hyrpOXO",
-    Client_ID: "LXEyV1V6XzRDb2twbHpVQzNnQkE6MTpjaQ",
-    Client_Secret: "1-LmJmf0yRk1qxPW1Xt98R3iMro_sFpbyMWOdQVcENwYXotPUH",
-    ACCESS_TOKEN: "1717449062855892992-wv5pD4VwDemUToZFIhTETAOwmMvtdd",
-    ACCESS_SECRET: "TKlfcR5fZq7clIMq9OrEu6XwpBA4ET1d4sNtX3qgwwpJt",
-    Bearer_Token:
-        "AAAAAAAAAAAAAAAAAAAAAKzLrAEAAAAA66oOaEoO40oJA%2B6Wf3dfs7J9qAs%3DrAEid36H85sOeCJb7HjB9Zocw5IYroM1YbF7Ndzdflx9SGNGdd",
-};
-const twitterConfigTimViec = {
-    API_KEY: "pEDhVzPUvq5QnY2vBa5UCuYGI",
-    API_SECRET: "8QXG78JrhEC70YULm11PIfJ2ejuCbhRh8VYvULTapjfP7vRTx6",
-    Client_ID: "UmkyMkJ6MHV1Z1JDQVJsOHZ1QV86MTpjaQ",
-    Client_Secret: "uedoQo8S7489JztJPQRPFfTCvuaIFNVrbM7ISIy8yL9bN9NFYs",
-    ACCESS_TOKEN: "998377215447347201-Esa0Kzb9XSeyKKtUeObpX4BXnc5FEt6",
-    ACCESS_SECRET: "X5LaoTajKhaM1NCTIDUGph8qNEfmsqcB5slxxiLbA25pJ",
-    Bearer_Token:
-        "AAAAAAAAAAAAAAAAAAAAAEXsrAEAAAAA1xZCb9y11KjyeJYeh2i5waS84Z8%3D5V5yTfN4CfLgDG7DuHarLtd2nFmz9sYyirC5vpkjGQTzmb95m4",
-};
-const bearer = new TwitterApi(process.env.BEARER_TOKEN);
-
-const client = new TwitterApi({
-    appKey: twitterConfig.API_KEY,
-    appSecret: twitterConfig.API_SECRET,
-    accessToken: twitterConfig.ACCESS_TOKEN,
-    accessSecret: twitterConfig.ACCESS_SECRET,
-});
-const clientTV = new TwitterApi({
-    appKey: twitterConfigTimViec.API_KEY,
-    appSecret: twitterConfigTimViec.API_SECRET,
-    accessToken: twitterConfigTimViec.ACCESS_TOKEN,
-    accessSecret: twitterConfigTimViec.ACCESS_SECRET,
-});
-const twitterClient = client.readWrite;
-const twitterClientTv = clientTV.readWrite;
-const twitterBearer = bearer.readOnly;
-const app = initializeApp(firebaseConfig);
-const storage = getStorage(app);
-const storageRef = ref(storage, "mp4");
-
-exports.twitter_tweet = async (req, res) => {
-    try {
-        const content = req.body.content;
-        const type = req.body.type;
-
-        if (type == 1) {
-            await twitterClient.v2.tweet(content);
-            return functions.success(res, {
-                message: " Work OK",
-            });
-        } else if (type == 2) {
-            await twitterClientTv.v2.tweet(content);
-            return functions.success(res, {
-                message: "tv OK",
-            });
-        }
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
-};
-const tweet = async (type, id, content) => {
-    try {
-        if (type == 1) {
-            await twitterClient.v2.tweet(content);
-        } else if (type == 2) {
-            await twitterClientTv.v2.tweet(content);
-        }
-        await VideoAi.updateOne(
-            { id: id },
-            {
-                upload_twitter: true,
-            }
-        );
-    } catch (err) {
-        return null;
-    }
-};
-exports.uploadStore = async (req, res, next) => {
-    const file = req.file;
-
-    const uploadTask = uploadBytesResumable(storageRef, file);
-    console.log(storageRef);
-    uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-            const progress =
-                (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log("Upload is " + progress + "% done");
-            switch (snapshot.state) {
-                case "paused":
-                    console.log("Upload is paused");
-                    break;
-                case "running":
-                    console.log("Upload is running");
-                    break;
-            }
-        },
-        (error) => {
-            console.log(error);
-            // Handle unsuccessful uploads
-        },
-        () => {
-            // Handle successful uploads on complete
-            // For instance, get the download URL: https://firebasestorage.googleapis.com/...
-            getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-                console.log("File available at", downloadURL);
-            });
-        }
-    );
-    res.status(200).send({
-        data: [],
-    });
-};
-
 const storageAvatarForm = (destination) => {
-    return multer.diskStorage({
-        destination: function (req, file, cb) {
-            let formDestination = " ";
-            const d = new Date(),
-                day = d.getDate() < 10 ? "0" + d.getDate() : d.getDate(),
-                month =
-                    Number(d.getMonth() + 1) < 10
-                        ? "0" + Number(d.getMonth() + 1)
-                        : Number(d.getMonth() + 1),
-                year = d.getFullYear();
-            formDestination = `${destination}/`;
-            if (!fs.existsSync(formDestination)) {
-                console.log("add new");
-                fs.mkdirSync(formDestination, { recursive: true });
-            }
-            cb(null, formDestination);
-        },
-        fileFilter: function (req, file, cb) {
-            const allowedTypes = ["video/webm"];
-            if (allowedTypes.includes(file.mimetype)) {
-                cb(null, true);
-            } else {
-                cb(new Error("Only video/webm format allowed!"));
-            }
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = req.body.id_blog;
-            // cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
-            cb(null, uniqueSuffix + "." + "webm");
-        },
-    });
+  return multer.diskStorage({
+    destination: function (req, file, cb) {
+      let formDestination = " ";
+      const d = new Date(),
+        day = d.getDate() < 10 ? "0" + d.getDate() : d.getDate(),
+        month =
+          Number(d.getMonth() + 1) < 10
+            ? "0" + Number(d.getMonth() + 1)
+            : Number(d.getMonth() + 1),
+        year = d.getFullYear();
+      formDestination = `${destination}/`;
+      if (!fs.existsSync(formDestination)) {
+        console.log("add new");
+        fs.mkdirSync(formDestination, { recursive: true });
+      }
+      cb(null, formDestination);
+    },
+    fileFilter: function (req, file, cb) {
+      const allowedTypes = ["video/webm"];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Only video/webm format allowed!"));
+      }
+    },
+    filename: function (req, file, cb) {
+      const uniqueSuffix = req.body.id_blog;
+      // cb(null, uniqueSuffix + "." + file.originalname.split(".").pop());
+      cb(null, uniqueSuffix + "." + "webm");
+    },
+  });
 };
 exports.update = multer({
-    storage: storageAvatarForm(`${process.env.storage_tv365}/video/videoai`),
+  storage: storageAvatarForm(`${process.env.storage_tv365}/video/videoai`),
 }).single("file");
 
 exports.updateVideo = async (req, res) => {
-    try {
-        const video = req.file;
-        const description = req.body.des;
-        const type = req.body.type;
-        const com_name = req.body.com_name;
-        const title = req.body.title;
-        const link_blog = req.body.link_blog;
-        const id_blog = Number(req.body.id_blog);
-        const newPath = video.path.replace(
-            "../storage/base365",
-            "https://api.timviec365.vn"
-        );
-        if (video) {
-            const videoInfo = {
-                id_blog: id_blog,
-                title: title,
-                description: description,
-                link_blog: link_blog,
-                link_server: video.path,
-                link_youtube: "",
-                com_name: com_name,
-                type: type,
-                status_server: 0,
-                upload_twitter: false,
-            };
-
-            const video_create = await create(videoInfo);
-            console.log(video_create);
-            if (video_create) {
-                authorize(credentialsObject, async (auth) => {
-                    await getChannel(
-                        video.path,
-                        auth,
-                        title,
-                        description,
-                        video_create.id,
-                        com_name
-                    );
-                });
-                functions.success(res, "Tạo thành công", {
-                    video_create,
-                });
-                // Create a new entry in the VideoAi model
-            } else {
-                return functions.setError(res, "That bai");
-            }
-        }
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
-};
-async function getChannel(
-    videoFilePath,
-    auth,
-    title,
-    description,
-    id,
-    com_name
-) {
-    var service = google.youtube("v3");
-    service.videos.insert(
-        {
-            auth: auth,
-            part: "snippet,status",
-            requestBody: {
-                snippet: {
-                    title,
-                    description,
-                    categoryId: categoryIds.ScienceTechnology,
-                    defaultLanguage: "vi",
-                    defaultAudioLanguage: "vi",
-                },
-                status: {
-                    privacyStatus: "public",
-                },
-            },
-            media: {
-                body: fs.createReadStream(videoFilePath),
-            },
-        },
-        // function (err, response) {
-        //     if (err) {
-        //         console.log("The API returned an error: " + err);
-        //         return;
-        //     }
-        //     console.log(response.data);
-
-        //     console.log("Video uploaded. Uploading the thumbnail now.");
-        //     // service.thumbnails.set(
-        //     //     {
-        //     //         auth: auth,
-        //     //         videoId: response.data.id,
-        //     //         media: {
-        //     //             body: fs.createReadStream(thumbFilePath),
-        //     //         },
-        //     //     },
-        //     //     function (err, response) {
-        //     //         if (err) {
-        //     //             console.log("The API returned an error: " + err);
-        //     //             return;
-        //     //         }
-        //     //         console.log(response.data);
-        //     //     }
-        //     // );
-        // }
-        async function (err, response) {
-            if (err) {
-                console.log("The API returned an error: " + err);
-            }
-            console.log(response.data);
-            const videoId = response.data.id;
-            console.log("uploading video " + videoId);
-            const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
-            await VideoAi.updateOne(
-                { id: id },
-                {
-                    link_youtube: videoLink,
-                    id_youtube: videoId,
-                    status_server: 1,
-                    link_server: "",
-                }
-            );
-            fs.unlink(videoFilePath, (err) => {
-                if (err) return null;
-            });
-            let tweet_content = {
-                text: `${title}
-                Link-bai-viet: ${videoLink}`,
-            };
-            if (com_name == "work247") {
-                await tweet(1, id, tweet_content);
-            } else if (com_name == "timviec365") {
-                await tweet(2, id, tweet_content);
-            }
-        }
+  try {
+    const video = req.file;
+    const description = req.body.des;
+    const type = req.body.type;
+    const com_name = req.body.com_name;
+    const title = req.body.title;
+    const link_blog = req.body.link_blog;
+    const id_blog = Number(req.body.id_blog);
+    const newPath = video.path.replace(
+      "../storage/base365",
+      "https://api.timviec365.vn"
     );
-}
-exports.editVideo = async (req, res) => {
-    try {
-        let { id_blog, link_youtube, id_youtube, id, title, des } = req.body;
-        await VideoAi.updateOne(
-            { id: id },
-            {
-                link_youtube: link_youtube,
-                id_youtube: id_youtube,
-                status_server: 1,
-                id_blog: id_blog,
-                title: title,
-                des: des,
-            }
-        );
-        return functions.success(res, {
-            message: "update thành công",
+    if (video) {
+      const videoInfo = {
+        id_blog: id_blog,
+        title: title,
+        description: description,
+        link_blog: link_blog,
+        link_server: video.path,
+        link_youtube: "",
+        com_name: com_name,
+        type: type,
+        status_server: 0,
+        upload_twitter: false,
+      };
+
+      const video_create = await create(videoInfo);
+      console.log(video_create);
+      if (video_create) {
+        // authorize(credentialsObject, async (auth) => {
+        //   await getChannel(
+        //     video.path,
+        //     auth,
+        //     title,
+        //     description,
+        //     video_create.id,
+        //     com_name
+        //   );
+        // });
+        functions.success(res, "Tạo thành công", {
+          video_create,
         });
-    } catch (err) {
-        return functions.setError(res, err.message);
+        // Create a new entry in the VideoAi model
+      } else {
+        return functions.setError(res, "That bai");
+      }
     }
+  } catch (err) {
+    return functions.setError(res, err.message);
+  }
+};
+
+exports.editVideo = async (req, res) => {
+  try {
+    let { id_blog, link_youtube, id_youtube, id, title, des } = req.body;
+    await VideoAi.updateOne(
+      { id: id },
+      {
+        link_youtube: link_youtube,
+        id_youtube: id_youtube,
+        status_server: 1,
+        id_blog: id_blog,
+        title: title,
+        des: des,
+      }
+    );
+    return functions.success(res, {
+      message: "update thành công",
+    });
+  } catch (err) {
+    return functions.setError(res, err.message);
+  }
 };
 exports.deleteVideo = async (req, res) => {
-    try {
-        let id_blog = req.body.id_blog;
-        let type = req.body.type;
-        let com_name = req.body.com_name;
-        // let videoFilePath = await VideoAi.findOne({
-        //     id_blog: id_blog,
-        //     type: type,
-        //     com_name: com_name,
-        // });
-        // const newPath = videoFilePath.link_youtube.replace(
-        //     "https://api.timviec365.vn",
-        //     "../storage/base365"
-        // );
-        await VideoAi.deleteOne({
-            id_blog: id_blog,
-            type: type,
-            com_name: com_name,
-        });
-        return functions.success(res, {
-            message: "Xoá thành công",
-        });
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
+  try {
+    let id_blog = req.body.id_blog;
+    let type = req.body.type;
+    let com_name = req.body.com_name;
+    // let videoFilePath = await VideoAi.findOne({
+    //     id_blog: id_blog,
+    //     type: type,
+    //     com_name: com_name,
+    // });
+    // const newPath = videoFilePath.link_youtube.replace(
+    //     "https://api.timviec365.vn",
+    //     "../storage/base365"
+    // );
+    await VideoAi.deleteOne({
+      id_blog: id_blog,
+      type: type,
+      com_name: com_name,
+    });
+    return functions.success(res, {
+      message: "Xoá thành công",
+    });
+  } catch (err) {
+    return functions.setError(res, err.message);
+  }
 };
 async function create({
-    id_blog,
-    id_youtube,
-    title,
-    description,
-    link_blog,
-    link_youtube,
-    link_server,
-    status_server,
-    type,
-    com_name,
+  id_blog,
+  id_youtube,
+  title,
+  description,
+  link_blog,
+  link_youtube,
+  link_server,
+  status_server,
+  type,
+  com_name,
 }) {
-    try {
-        let maxID =
-            (await VideoAi.findOne({}, {}, { sort: { id: -1 } }).lean()) || 0;
-        const video = new VideoAi({
-            id: Number(maxID.id) + 1 || 1,
-            id_blog: id_blog,
-            id_youtube: id_youtube,
-            title: title,
-            description: description,
-            link_blog: link_blog,
-            link_youtube: link_youtube,
-            link_server: link_server,
-            status_server: status_server,
-            type: type,
-            com_name: com_name,
-        });
-        await video.save();
-        return video;
-    } catch (error) {
-        return null;
-    }
+  try {
+    let maxID =
+      (await VideoAi.findOne({}, {}, { sort: { id: -1 } }).lean()) || 0;
+    const video = new VideoAi({
+      id: Number(maxID.id) + 1 || 1,
+      id_blog: id_blog,
+      id_youtube: id_youtube,
+      title: title,
+      description: description,
+      link_blog: link_blog,
+      link_youtube: link_youtube,
+      link_server: link_server,
+      status_server: status_server,
+      type: type,
+      com_name: com_name,
+    });
+    await video.save();
+    return video;
+  } catch (error) {
+    return null;
+  }
 }
 exports.getListBlogWork247 = async (req, res, next) => {
-    try {
-        const page = req.body.page;
-        const id = req.body.id;
-        const type = req.body.type;
-        const from = new FormData();
-        page && from.append("page", page);
-        let resp;
-        // type = 1 : blog; type = 2 : tuyendung; type = 3 : ung viec
-        if (type == 1) {
-            id && from.append("news_id", id);
-            resp = await axios.post(
-                "https://work247.vn/api/list_news_ai.php",
-                from
-            );
-        } else if (type == 2) {
-            id && from.append("new_id", id);
-            resp = await axios.post(
-                "https://work247.vn/api/thongtin_text_ttd.php",
-                from
-            );
-        } else if (type == 3) {
-            id && from.append("use_id", id);
-            resp = await axios.post(
-                "https://work247.vn/api/thongtin_uv_audio.php",
-                from
-            );
-        }
-        if (resp.data.result) {
-            res.status(200).send({
-                data: resp.data,
-            });
-        }
-    } catch (error) {
-        return functions.setError(res, error.message);
+  try {
+    const page = req.body.page;
+    const id = req.body.id;
+    const type = req.body.type;
+    const from = new FormData();
+    page && from.append("page", page);
+    let resp;
+    // type = 1 : blog; type = 2 : tuyendung; type = 3 : ung viec
+    if (type == 1) {
+      id && from.append("news_id", id);
+      resp = await axios.post("https://work247.vn/api/list_news_ai.php", from);
+    } else if (type == 2) {
+      id && from.append("new_id", id);
+      resp = await axios.post(
+        "https://work247.vn/api/thongtin_text_ttd.php",
+        from
+      );
+    } else if (type == 3) {
+      id && from.append("use_id", id);
+      resp = await axios.post(
+        "https://work247.vn/api/thongtin_uv_audio.php",
+        from
+      );
     }
+    if (resp.data.result) {
+      res.status(200).send({
+        data: resp.data,
+      });
+    }
+  } catch (error) {
+    return functions.setError(res, error.message);
+  }
 };
 exports.getListBlogTimViec = async (req, res, next) => {
-    try {
-        const page = req.body.page;
-        const pageSize = req.body.pageSize;
-        const news_id = req.body.news_id;
-        const type = req.body.type;
-        const from = new FormData();
+  try {
+    const page = req.body.page;
+    const pageSize = req.body.pageSize;
+    const news_id = req.body.news_id;
+    const type = req.body.type;
+    const from = new FormData();
 
-        news_id && from.append("newId", news_id);
-        page && from.append("page", page);
-        pageSize && from.append("pageSize", pageSize);
-        let resp;
-        // type = 1 : blog; type = 2 : tuyendung; type = 3 : ung viec
-        if (type == 1) {
-            resp = await axios.post(
-                "http://210.245.108.202:8001/api/timviec/blog/listNewsAI",
-                from
-            );
-        } else if (type == 2) {
-            resp = await axios.post(
-                "http://210.245.108.202:8001/api/timviec/new/listNewsAI",
-                from
-            );
-        } else if (type == 3) {
-            resp = await axios.post(
-                "https://work247.vn/api/list_news_ai.php",
-                from
-            );
-        }
-        if (resp.data.data.result) {
-            res.status(200).send({
-                data: resp.data.data,
-            });
-        }
-    } catch (error) {
-        return functions.setError(res, error.message);
+    news_id && from.append("newId", news_id);
+    page && from.append("page", page);
+    pageSize && from.append("pageSize", pageSize);
+    let resp;
+    // type = 1 : blog; type = 2 : tuyendung; type = 3 : ung viec
+    if (type == 1) {
+      resp = await axios.post(
+        "http://210.245.108.202:8001/api/timviec/blog/listNewsAI",
+        from
+      );
+    } else if (type == 2) {
+      resp = await axios.post(
+        "http://210.245.108.202:8001/api/timviec/new/listNewsAI",
+        from
+      );
+    } else if (type == 3) {
+      resp = await axios.post("https://work247.vn/api/list_news_ai.php", from);
     }
+    if (resp.data.data.result) {
+      res.status(200).send({
+        data: resp.data.data,
+      });
+    }
+  } catch (error) {
+    return functions.setError(res, error.message);
+  }
 };
 
 exports.listAllFilter = async (req, res) => {
-    try {
-        let id_blog = req.body.id_blog;
-        let type = req.body.type;
-        let com_name = req.body.com_name;
-        let resp;
-        if (id_blog) {
-            resp = await VideoAi.findOne({
-                id_blog: id_blog,
-                type: type,
-                com_name: com_name,
-            });
-        } else {
-            resp = await VideoAi.find({});
-        }
-        res.status(200).send({
-            data: {
-                result: true,
-                data: resp,
-            },
-        });
-    } catch (err) {
-        return functions.setError(res, error.message);
+  try {
+    let id_blog = req.body.id_blog;
+    let type = req.body.type;
+    let com_name = req.body.com_name;
+    let resp;
+    if (id_blog) {
+      resp = await VideoAi.findOne({
+        id_blog: id_blog,
+        type: type,
+        com_name: com_name,
+      });
+    } else {
+      resp = await VideoAi.find({});
     }
-};
-
-function authorize(credentials, callback) {
-    var clientSecret = credentials.web.client_secret;
-    var clientId = credentials.web.client_id;
-    var redirectUrl = credentials.web.redirect_uris[0];
-    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-    // Check if we have previously stored a token.
-    fs.readFile(TOKEN_PATH, function (err, token) {
-        console.log(token);
-        oauth2Client.credentials = JSON.parse(token);
-        callback(oauth2Client);
+    res.status(200).send({
+      data: {
+        result: true,
+        data: resp,
+      },
     });
-}
-
-exports.uploadYoutube = async (req, res) => {
-    try {
-        let { id_blog, type, com_name, title, description } = req.body;
-
-        let resp = await VideoAi.findOne({
-            id_blog: id_blog,
-            type: type,
-            com_name: com_name,
-        });
-        console.log(resp);
-        if (resp) {
-            authorize(credentialsObject, async (auth) => {
-                await getChannel(
-                    resp.link_server,
-                    auth,
-                    resp.link_blog,
-                    resp.id_blog,
-                    title,
-                    description,
-                    resp.id,
-                    res
-                );
-            });
-        } else {
-            return functions.setError(res, {
-                message: "Couldn't find id_blog",
-            });
-        }
-    } catch (err) {
-        return functions.setError(res, error.message);
-    }
-};
-
-exports.twitter_v2_self_owned = async (req, res) => {
-    try {
-        const oauthVerifier = req.query.oauth_verifier;
-        fs.writeFile(TOKEN_PATH, JSON.stringify(oauthVerifier), (err) => {
-            if (err) return functions.setError(res, error.message);
-            console.log("Token stored to " + TOKEN_PATH);
-            res.status(200).send({
-                data: {
-                    result: true,
-                    data: oauthVerifier,
-                },
-            });
-        });
-    } catch (err) {
-        return functions.setError(res, error.message);
-    }
-};
-
-const createCsrfState = () => Math.random().toString(36).substring(7);
-let url = "https://open-api.tiktok.com/platform/oauth/connect/";
-const CLIENT_KEY = "aw7qlmvbt03zlhhu";
-// res.cookie("csrfState", csrfState, { maxAge: 60000 });
-exports.getTokenTikTok = async (req, res, next) => {
-    try {
-        const csrfState = createCsrfState();
-        url += `?client_key=${CLIENT_KEY}`;
-        url += "&scope=user.info.basic";
-        url += "&response_type=code";
-        url += `&redirect_uri=${encodeURIComponent(
-            "https://hungha365.com/video-ai/"
-        )}`;
-        url += "&state=" + csrfState;
-        res.status(200).send({
-            data: {
-                result: true,
-                message: "done",
-                url: url,
-            },
-        });
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
+  } catch (err) {
+    return functions.setError(res, error.message);
+  }
 };

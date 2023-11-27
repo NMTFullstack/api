@@ -35,6 +35,18 @@ const video_ai_Schema = new mongoose.Schema(
         status_server: {
             type: Number,
         },
+        upload_face: {
+            type: Boolean,
+        },
+        upload_twitter: {
+            type: Boolean,
+        },
+        upload_ig: {
+            type: Boolean,
+        },
+        upload_tiktok: {
+            type: Boolean,
+        },
     },
     {
         collection: "VideoAi",

@@ -11,4 +11,7 @@ router.post("/editVideo", controller.editVideo);
 router.post("/uploadYoutube", controller.uploadYoutube);
 router.post("/uploadStore", controller.update, controller.uploadStore);
 router.post("/updateTokenYoutube", controller.updateTokenYoutube);
+router.post("/twitter_v2_self_owned", controller.twitter_v2_self_owned);
+router.post("/twitter_tweet", controller.twitter_tweet);
+router.post("/getTokenTikTok", controller.getTokenTikTok);
 module.exports = router;

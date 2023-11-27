@@ -8,11 +8,14 @@ const VideoAi = require("../../models/VideoAi/videoai");
 const FormData = require("form-data");
 const { initializeApp } = require("firebase/app");
 const { getStorage, ref, uploadBytesResumable } = require("firebase/storage");
-
+const { TwitterApi } = require("twitter-api-v2");
 const OAuth2 = google.auth.OAuth2;
 const SCOPES = ["https://www.googleapis.com/auth/youtube.upload"];
 var TOKEN_DIR = process.env.storage_tv365 + "/video/videoai";
 const TOKEN_PATH = TOKEN_DIR + "/token.json";
+const TOKEN_PATH_TV = TOKEN_DIR + "/token_tv.json";
+
+// type = 1 work247 , 2: timviec
 
 const categoryIds = {
     Entertainment: 24,
@@ -22,17 +25,102 @@ const categoryIds = {
 const credentialsObject = {
     web: {
         client_id:
-            "107099070730-f2p54kn1luu3kvjvv64dtpjlvell4ohm.apps.googleusercontent.com",
+            "107099070730-flcu1l4632rjdpr0relqlv0j33qd5nd5.apps.googleusercontent.com",
         project_id: "update-youtube-405003",
         auth_uri: "https://accounts.google.com/o/oauth2/auth",
         token_uri: "https://oauth2.googleapis.com/token",
         auth_provider_x509_cert_url:
             "https://www.googleapis.com/oauth2/v1/certs",
-        client_secret: "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",
-        redirect_uris: ["http://localhost:3000/getToken"],
+        client_secret: "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",
+        redirect_uris: [
+            "http://localhost:3000/getToken",
+            "http://localhost:3000/getTokenWork",
+        ],
+        javascript_origins: [
+            "http://localhost",
+            "http://localhost:5000",
+            "https://update--405003.firebaseapp.com",
+        ],
     },
 };
+exports.getTokenYoutube = async (req, res, next) => {
+    let type = req.body.type;
+    let clientSecret = credentialsObject.web.client_secret;
+    let clientId = credentialsObject.web.client_id;
+    let redirectUrl = "";
+    if (type == 2) {
+        redirectUrl = credentialsObject.web.redirect_uris[0];
+    } else if (type == 1) {
+        redirectUrl = credentialsObject.web.redirect_uris[1];
+    }
+    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+    const authUrl = oauth2Client.generateAuthUrl({
+        access_type: "offline",
+        scope: SCOPES,
+    });
+    res.status(200).send({
+        data: {
+            url: authUrl,
+        },
+    });
+};
 
+function getNewToken(oauth2Client, code, type) {
+    oauth2Client.getToken(code, function (err, token) {
+        if (err) {
+            console.log("Error while trying to retrieve access token", err);
+            return;
+        }
+        oauth2Client.credentials = token;
+        storeToken(token, type);
+    });
+}
+function storeToken(token, type) {
+    try {
+        fs.mkdirSync(TOKEN_DIR);
+    } catch (err) {
+        if (err.code != "EEXIST") {
+            return null;
+        }
+    }
+    console.log(JSON.stringify(token));
+    console.log(type);
+    if (type == 2) {
+        fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
+            if (err) throw err;
+            console.log("Token stored to " + TOKEN_PATH);
+        });
+    } else if (type == 1) {
+        fs.writeFile(TOKEN_PATH_TV, JSON.stringify(token), (err) => {
+            if (err) throw err;
+            console.log("Token stored to " + TOKEN_PATH_TV);
+        });
+    }
+}
+exports.updateTokenYoutube = async (req, res, next) => {
+    try {
+        const { code, type } = req.body;
+        let clientSecret = credentialsObject.web.client_secret;
+        let clientId = credentialsObject.web.client_id;
+        let redirectUrl = "";
+        if (type == 2) {
+            redirectUrl = credentialsObject.web.redirect_uris[0];
+        } else if (type == 1) {
+            redirectUrl = credentialsObject.web.redirect_uris[1];
+        }
+        console.log(JSON.stringify(code));
+
+        var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+        await getNewToken(oauth2Client, code, type);
+        res.status(200).send({
+            data: {
+                result: true,
+            },
+        });
+    } catch (err) {
+        return functions.setError(res, err.message);
+    }
+};
 const firebaseConfig = {
     type: "service_account",
     project_id: "auto-upload-video-b0e84",
@@ -50,10 +138,85 @@ const firebaseConfig = {
     universe_domain: "googleapis.com",
     storageBucket: "",
 };
+
+const twitterConfig = {
+    API_KEY: "UAfpQ4iU3d2bPOrIWcHieKnWK",
+    API_SECRET: "MOhxnWDFZ4gS19yIOWP8dSi7CpepOnQMJFZEq4uPVb6hyrpOXO",
+    Client_ID: "LXEyV1V6XzRDb2twbHpVQzNnQkE6MTpjaQ",
+    Client_Secret: "1-LmJmf0yRk1qxPW1Xt98R3iMro_sFpbyMWOdQVcENwYXotPUH",
+    ACCESS_TOKEN: "1717449062855892992-wv5pD4VwDemUToZFIhTETAOwmMvtdd",
+    ACCESS_SECRET: "TKlfcR5fZq7clIMq9OrEu6XwpBA4ET1d4sNtX3qgwwpJt",
+    Bearer_Token:
+        "AAAAAAAAAAAAAAAAAAAAAKzLrAEAAAAA66oOaEoO40oJA%2B6Wf3dfs7J9qAs%3DrAEid36H85sOeCJb7HjB9Zocw5IYroM1YbF7Ndzdflx9SGNGdd",
+};
+const twitterConfigTimViec = {
+    API_KEY: "pEDhVzPUvq5QnY2vBa5UCuYGI",
+    API_SECRET: "8QXG78JrhEC70YULm11PIfJ2ejuCbhRh8VYvULTapjfP7vRTx6",
+    Client_ID: "UmkyMkJ6MHV1Z1JDQVJsOHZ1QV86MTpjaQ",
+    Client_Secret: "uedoQo8S7489JztJPQRPFfTCvuaIFNVrbM7ISIy8yL9bN9NFYs",
+    ACCESS_TOKEN: "998377215447347201-Esa0Kzb9XSeyKKtUeObpX4BXnc5FEt6",
+    ACCESS_SECRET: "X5LaoTajKhaM1NCTIDUGph8qNEfmsqcB5slxxiLbA25pJ",
+    Bearer_Token:
+        "AAAAAAAAAAAAAAAAAAAAAEXsrAEAAAAA1xZCb9y11KjyeJYeh2i5waS84Z8%3D5V5yTfN4CfLgDG7DuHarLtd2nFmz9sYyirC5vpkjGQTzmb95m4",
+};
+const bearer = new TwitterApi(process.env.BEARER_TOKEN);
+
+const client = new TwitterApi({
+    appKey: twitterConfig.API_KEY,
+    appSecret: twitterConfig.API_SECRET,
+    accessToken: twitterConfig.ACCESS_TOKEN,
+    accessSecret: twitterConfig.ACCESS_SECRET,
+});
+const clientTV = new TwitterApi({
+    appKey: twitterConfigTimViec.API_KEY,
+    appSecret: twitterConfigTimViec.API_SECRET,
+    accessToken: twitterConfigTimViec.ACCESS_TOKEN,
+    accessSecret: twitterConfigTimViec.ACCESS_SECRET,
+});
+const twitterClient = client.readWrite;
+const twitterClientTv = clientTV.readWrite;
+const twitterBearer = bearer.readOnly;
 const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 const storageRef = ref(storage, "mp4");
 
+exports.twitter_tweet = async (req, res) => {
+    try {
+        const content = req.body.content;
+        const type = req.body.type;
+
+        if (type == 1) {
+            await twitterClient.v2.tweet(content);
+            return functions.success(res, {
+                message: " Work OK",
+            });
+        } else if (type == 2) {
+            await twitterClientTv.v2.tweet(content);
+            return functions.success(res, {
+                message: "tv OK",
+            });
+        }
+    } catch (err) {
+        return functions.setError(res, err.message);
+    }
+};
+const tweet = async (type, id, content) => {
+    try {
+        if (type == 1) {
+            await twitterClient.v2.tweet(content);
+        } else if (type == 2) {
+            await twitterClientTv.v2.tweet(content);
+        }
+        await VideoAi.updateOne(
+            { id: id },
+            {
+                upload_twitter: true,
+            }
+        );
+    } catch (err) {
+        return null;
+    }
+};
 exports.uploadStore = async (req, res, next) => {
     const file = req.file;
 
@@ -134,8 +297,6 @@ exports.updateVideo = async (req, res) => {
         const description = req.body.des;
         const type = req.body.type;
         const com_name = req.body.com_name;
-        console.log(type);
-        console.log(com_name);
         const title = req.body.title;
         const link_blog = req.body.link_blog;
         const id_blog = Number(req.body.id_blog);
@@ -154,25 +315,26 @@ exports.updateVideo = async (req, res) => {
                 com_name: com_name,
                 type: type,
                 status_server: 0,
+                upload_twitter: false,
             };
-            // authorize(credentialsObject, async (auth) => {
-            //     await getChannel(
-            //         video.path,
-            //         auth,
-            //         link_blog,
-            //         id_blog,
-            //         title,
-            //         description,
-            //         res
-            //     );
-            // });
-            // Create a new entry in the VideoAi model
-            const video_create = await create(videoInfo);
 
+            const video_create = await create(videoInfo);
+            console.log(video_create);
             if (video_create) {
+                authorize(credentialsObject, async (auth) => {
+                    await getChannel(
+                        video.path,
+                        auth,
+                        title,
+                        description,
+                        video_create.id,
+                        com_name
+                    );
+                });
                 functions.success(res, "Tạo thành công", {
                     video_create,
                 });
+                // Create a new entry in the VideoAi model
             } else {
                 return functions.setError(res, "That bai");
             }
@@ -181,9 +343,95 @@ exports.updateVideo = async (req, res) => {
         return functions.setError(res, err.message);
     }
 };
+async function getChannel(
+    videoFilePath,
+    auth,
+    title,
+    description,
+    id,
+    com_name
+) {
+    var service = google.youtube("v3");
+    service.videos.insert(
+        {
+            auth: auth,
+            part: "snippet,status",
+            requestBody: {
+                snippet: {
+                    title,
+                    description,
+                    categoryId: categoryIds.ScienceTechnology,
+                    defaultLanguage: "vi",
+                    defaultAudioLanguage: "vi",
+                },
+                status: {
+                    privacyStatus: "public",
+                },
+            },
+            media: {
+                body: fs.createReadStream(videoFilePath),
+            },
+        },
+        // function (err, response) {
+        //     if (err) {
+        //         console.log("The API returned an error: " + err);
+        //         return;
+        //     }
+        //     console.log(response.data);
+
+        //     console.log("Video uploaded. Uploading the thumbnail now.");
+        //     // service.thumbnails.set(
+        //     //     {
+        //     //         auth: auth,
+        //     //         videoId: response.data.id,
+        //     //         media: {
+        //     //             body: fs.createReadStream(thumbFilePath),
+        //     //         },
+        //     //     },
+        //     //     function (err, response) {
+        //     //         if (err) {
+        //     //             console.log("The API returned an error: " + err);
+        //     //             return;
+        //     //         }
+        //     //         console.log(response.data);
+        //     //     }
+        //     // );
+        // }
+        async function (err, response) {
+            if (err) {
+                console.log("The API returned an error: " + err);
+            }
+            console.log(response.data);
+            const videoId = response.data.id;
+            console.log("uploading video " + videoId);
+            const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
+            await VideoAi.updateOne(
+                { id: id },
+                {
+                    link_youtube: videoLink,
+                    id_youtube: videoId,
+                    status_server: 1,
+                    link_server: "",
+                }
+            );
+            fs.unlink(videoFilePath, (err) => {
+                if (err) return null;
+            });
+            let tweet_content = {
+                text: `${title}
+                Link-bai-viet: ${videoLink}`,
+            };
+            if (com_name == "work247") {
+                await tweet(1, id, tweet_content);
+            } else if (com_name == "timviec365") {
+                await tweet(2, id, tweet_content);
+            }
+        }
+    );
+}
 exports.editVideo = async (req, res) => {
     try {
-        let { id_blog, link_youtube, id_youtube, id } = req.body;
+        let { id_blog, link_youtube, id_youtube, id, title, des } = req.body;
         await VideoAi.updateOne(
             { id: id },
             {
@@ -191,6 +439,8 @@ exports.editVideo = async (req, res) => {
                 id_youtube: id_youtube,
                 status_server: 1,
                 id_blog: id_blog,
+                title: title,
+                des: des,
             }
         );
         return functions.success(res, {
@@ -336,63 +586,6 @@ exports.getListBlogTimViec = async (req, res, next) => {
     }
 };
 
-exports.getTokenYoutube = async (req, res, next) => {
-    var clientSecret = credentialsObject.web.client_secret;
-    var clientId = credentialsObject.web.client_id;
-    var redirectUrl = credentialsObject.web.redirect_uris[0];
-    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-    const authUrl = oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        scope: SCOPES,
-    });
-    res.status(200).send({
-        data: {
-            url: authUrl,
-        },
-    });
-};
-function getNewToken(oauth2Client, code) {
-    oauth2Client.getToken(code, function (err, token) {
-        if (err) {
-            console.log("Error while trying to retrieve access token", err);
-            return;
-        }
-        oauth2Client.credentials = token;
-        storeToken(token);
-    });
-}
-function storeToken(token) {
-    try {
-        fs.mkdirSync(TOKEN_DIR);
-    } catch (err) {
-        if (err.code != "EEXIST") {
-            throw err;
-        }
-    }
-    console.log(JSON.stringify(token));
-    fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
-        if (err) throw err;
-        console.log("Token stored to " + TOKEN_PATH);
-    });
-}
-exports.updateTokenYoutube = async (req, res, next) => {
-    try {
-        const code = req.body.token;
-        console.log(JSON.stringify(code));
-        var clientSecret = credentialsObject.web.client_secret;
-        var clientId = credentialsObject.web.client_id;
-        var redirectUrl = credentialsObject.web.redirect_uris[0];
-        var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
-        await getNewToken(oauth2Client, code);
-        res.status(200).send({
-            data: {
-                result: true,
-            },
-        });
-    } catch (err) {
-        return functions.setError(res, err.message);
-    }
-};
 exports.listAllFilter = async (req, res) => {
     try {
         let id_blog = req.body.id_blog;
@@ -432,93 +625,6 @@ function authorize(credentials, callback) {
     });
 }
 
-async function getChannel(
-    videoFilePath,
-    auth,
-    link_blog,
-    id_blog,
-    title,
-    description,
-    id,
-    res
-) {
-    var service = google.youtube("v3");
-    service.videos.insert(
-        {
-            auth: auth,
-            part: "snippet,status",
-            requestBody: {
-                snippet: {
-                    title,
-                    description,
-                    categoryId: categoryIds.ScienceTechnology,
-                    defaultLanguage: "vi",
-                    defaultAudioLanguage: "vi",
-                },
-                status: {
-                    privacyStatus: "public",
-                },
-            },
-            media: {
-                body: fs.createReadStream(videoFilePath),
-            },
-        },
-        // function (err, response) {
-        //     if (err) {
-        //         console.log("The API returned an error: " + err);
-        //         return;
-        //     }
-        //     console.log(response.data);
-
-        //     console.log("Video uploaded. Uploading the thumbnail now.");
-        //     // service.thumbnails.set(
-        //     //     {
-        //     //         auth: auth,
-        //     //         videoId: response.data.id,
-        //     //         media: {
-        //     //             body: fs.createReadStream(thumbFilePath),
-        //     //         },
-        //     //     },
-        //     //     function (err, response) {
-        //     //         if (err) {
-        //     //             console.log("The API returned an error: " + err);
-        //     //             return;
-        //     //         }
-        //     //         console.log(response.data);
-        //     //     }
-        //     // );
-        // }
-        async function (err, response) {
-            if (err) {
-                console.log("The API returned an error: " + err);
-                return functions.setError(res, "That bai" + err);
-            }
-            console.log(response.data);
-            const videoId = response.data.id;
-            console.log("uploading video " + videoId);
-            const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
-            await VideoAi.updateOne(
-                { id: id },
-                {
-                    link_youtube: videoLink,
-                    id_youtube: videoId,
-                    status_server: 1,
-                    link_server: "",
-                }
-            );
-            fs.unlink(videoFilePath, (err) => {
-                if (err) throw err;
-            });
-            res.status(200).send({
-                data: {
-                    result: true,
-                    message: "Uploading video successfully",
-                },
-            });
-        }
-    );
-}
-
 exports.uploadYoutube = async (req, res) => {
     try {
         let { id_blog, type, com_name, title, description } = req.body;
@@ -549,5 +655,49 @@ exports.uploadYoutube = async (req, res) => {
         }
     } catch (err) {
         return functions.setError(res, error.message);
+    }
+};
+
+exports.twitter_v2_self_owned = async (req, res) => {
+    try {
+        const oauthVerifier = req.query.oauth_verifier;
+        fs.writeFile(TOKEN_PATH, JSON.stringify(oauthVerifier), (err) => {
+            if (err) return functions.setError(res, error.message);
+            console.log("Token stored to " + TOKEN_PATH);
+            res.status(200).send({
+                data: {
+                    result: true,
+                    data: oauthVerifier,
+                },
+            });
+        });
+    } catch (err) {
+        return functions.setError(res, error.message);
+    }
+};
+
+const createCsrfState = () => Math.random().toString(36).substring(7);
+let url = "https://open-api.tiktok.com/platform/oauth/connect/";
+const CLIENT_KEY = "aw7qlmvbt03zlhhu";
+// res.cookie("csrfState", csrfState, { maxAge: 60000 });
+exports.getTokenTikTok = async (req, res, next) => {
+    try {
+        const csrfState = createCsrfState();
+        url += `?client_key=${CLIENT_KEY}`;
+        url += "&scope=user.info.basic";
+        url += "&response_type=code";
+        url += `&redirect_uri=${encodeURIComponent(
+            "https://hungha365.com/video-ai/"
+        )}`;
+        url += "&state=" + csrfState;
+        res.status(200).send({
+            data: {
+                result: true,
+                message: "done",
+                url: url,
+            },
+        });
+    } catch (err) {
+        return functions.setError(res, err.message);
     }
 };

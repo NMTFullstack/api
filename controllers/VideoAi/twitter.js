@@ -38,13 +38,14 @@ const clientTV = new TwitterApi({
 const twitterClient = client.readWrite;
 const twitterClientTv = clientTV.readWrite;
 
-exports.tweet = async (com_name, id, content) => {
+exports.tweet = async (com_name, id, title, tags, link) => {
     try {
-        if (com_name == "work247") {
-            await twitterClient.v2.tweet(content);
-        } else if (com_name == "timviec365") {
-            await twitterClientTv.v2.tweet(content);
-        }
+        const twitterClient =
+            com_name === "work247" ? twitterClient : twitterClientTv;
+
+        const tweetContent = `${title}\n${tags}\n${link}`;
+        await twitterClient.v2.tweet(tweetContent);
+
         await VideoAi.updateOne(
             { id: id },
             {
@@ -52,14 +53,18 @@ exports.tweet = async (com_name, id, content) => {
             }
         );
     } catch (err) {
+        console.error(err);
         return null;
     }
 };
 
 exports.twitter_tweet = async (req, res) => {
     try {
-        const content = req.body.content;
+        const { text } = req.body;
         const type = req.body.type;
+        let content = {
+            text: text,
+        };
         if (type == 1) {
             await twitterClient.v2.tweet(content);
             return functions.success(res, {

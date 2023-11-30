@@ -40,11 +40,9 @@ const twitterClientTv = clientTV.readWrite;
 
 exports.tweet = async (com_name, id, title, tags, link) => {
     try {
-        const twitterClient =
-            com_name === "work247" ? twitterClient : twitterClientTv;
-
+        const twitter = com_name == "work247" ? twitterClient : twitterClientTv;
         const tweetContent = `${title}\n${tags}\n${link}`;
-        await twitterClient.v2.tweet(tweetContent);
+        await twitter.v2.tweet(tweetContent);
 
         await VideoAi.updateOne(
             { id: id },
@@ -52,6 +50,7 @@ exports.tweet = async (com_name, id, title, tags, link) => {
                 upload_twitter: true,
             }
         );
+        console.log("upload success twitter");
     } catch (err) {
         console.error(err);
         return null;

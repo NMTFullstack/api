@@ -23,7 +23,7 @@ const categoryIds = {
     ShortMovies: 18,
 };
 const credentialsObject = {
-    web: {
+    work: {
         client_id:
             "258536247516-u2p0rq9shfq846lb8g9o4kh9i67giu76.apps.googleusercontent.com",
         project_id: "upload-406603",
@@ -32,22 +32,35 @@ const credentialsObject = {
         auth_provider_x509_cert_url:
             "https://www.googleapis.com/oauth2/v1/certs",
         client_secret: "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",
-        redirect_uris: [
-            "https://hungha365.com/video-ai/getTokenTimViec",
-            "https://hungha365.com/video-ai/getTokenWork",
-        ],
+        redirect_uris: ["http://localhost:3000//getTokenWork"],
+    },
+    // Work247
+    timviec: {
+        client_id:
+            "1026508981145-lmeg580meb9stfsall25ak9jt516h45v.apps.googleusercontent.com",
+        project_id: "upyoutube-406601",
+        auth_uri: "https://accounts.google.com/o/oauth2/auth",
+        token_uri: "https://oauth2.googleapis.com/token",
+        auth_provider_x509_cert_url:
+            "https://www.googleapis.com/oauth2/v1/certs",
+        client_secret: "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",
+        redirect_uris: ["http://localhost:3000//getTokenTimViec"],
     },
 };
 
 exports.getTokenYoutube = async (req, res, next) => {
     let com_name = req.body.com_name;
-    let clientSecret = credentialsObject.web.client_secret;
-    let clientId = credentialsObject.web.client_id;
+    let clientSecret = "";
+    let clientId = "";
     let redirectUrl = "";
     if (com_name == "timviec365") {
-        redirectUrl = credentialsObject.web.redirect_uris[0];
+        clientSecret = credentialsObject.timviec.client_secret;
+        clientId = credentialsObject.timviec.client_id;
+        redirectUrl = credentialsObject.timviec.redirect_uris[0];
     } else if (com_name == "work247") {
-        redirectUrl = credentialsObject.web.redirect_uris[1];
+        clientSecret = credentialsObject.work.client_secret;
+        clientId = credentialsObject.work.client_id;
+        redirectUrl = credentialsObject.work.redirect_uris[0];
     }
     var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
     const authUrl = oauth2Client.generateAuthUrl({
@@ -102,50 +115,53 @@ function storeToken(token, com_name) {
 //         callback(oauth2Client);
 //     });
 // }
-exports.uploadYoutube = async (req, res) => {
-    try {
-        let { id, type, com_name, title, description, link } = req.body;
-        console.log(id_blog, type, com_name, title, description);
+// exports.uploadYoutube = async (req, res) => {
+//     try {
+//         let { id, type, com_name, title, description, link } = req.body;
+//         console.log(id_blog, type, com_name, title, description);
 
-        let resp = await VideoAi.findOne({
-            id_blog: id_blog,
-            type: type,
-            com_name: com_name,
-        });
-        console.log(resp);
-        if (resp) {
-            authorize(credentialsObject, async (auth) => {
-                await getChannel(
-                    // resp.link_server,
-                    link,
-                    auth,
-                    title,
-                    description,
-                    id,
-                    com_name
-                );
-            });
-        } else {
-            return functions.setError(res, {
-                message: "Couldn't find id_blog",
-            });
-        }
-    } catch (err) {
-        return functions.setError(res, error.message);
-    }
-};
+//         let resp = await VideoAi.findOne({
+//             id_blog: id_blog,
+//             type: type,
+//             com_name: com_name,
+//         });
+//         console.log(resp);
+//         if (resp) {
+//             authorize(credentialsObject, async (auth) => {
+//                 await getChannel(
+//                     // resp.link_server,
+//                     link,
+//                     auth,
+//                     title,
+//                     description,
+//                     id,
+//                     com_name
+//                 );
+//             });
+//         } else {
+//             return functions.setError(res, {
+//                 message: "Couldn't find id_blog",
+//             });
+//         }
+//     } catch (err) {
+//         return functions.setError(res, error.message);
+//     }
+// };
 exports.updateTokenYoutube = async (req, res, next) => {
     try {
         const { code, com_name } = req.body;
-        let clientSecret = credentialsObject.web.client_secret;
-        let clientId = credentialsObject.web.client_id;
+        let clientSecret = "";
+        let clientId = "";
         let redirectUrl = "";
         if (com_name == "timviec365") {
-            redirectUrl = credentialsObject.web.redirect_uris[0];
+            clientSecret = credentialsObject.timviec.client_secret;
+            clientId = credentialsObject.timviec.client_id;
+            redirectUrl = credentialsObject.timviec.redirect_uris[0];
         } else if (com_name == "work247") {
-            redirectUrl = credentialsObject.web.redirect_uris[1];
+            clientSecret = credentialsObject.work.client_secret;
+            clientId = credentialsObject.work.client_id;
+            redirectUrl = credentialsObject.work.redirect_uris[0];
         }
-        console.log(JSON.stringify(code));
 
         var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
         await getNewToken(oauth2Client, code, com_name);
@@ -160,18 +176,19 @@ exports.updateTokenYoutube = async (req, res, next) => {
 };
 
 async function authorizeTest(credentials, com_name) {
-    let clientSecret = credentials.web.client_secret;
-    let clientId = credentials.web.client_id;
-    let redirectUrl = null;
     if (com_name == "work247") {
-        redirectUrl = credentials.web.redirect_uris[1];
+        let clientSecret = credentialsObject.work.client_secret;
+        let clientId = credentialsObject.work.client_id;
+        let redirectUrl = credentialsObject.work.redirect_uris[0];
         let oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
         const token = await fs.readFileSync(TOKEN_PATH_Work);
         let tokenInit = JSON.parse(token);
         oauth2Client.credentials = tokenInit;
         return oauth2Client;
     } else if (com_name == "timviec365") {
-        redirectUrl = credentials.web.redirect_uris[0];
+        let clientSecret = credentialsObject.timviec.client_secret;
+        let clientId = credentialsObject.timviec.client_id;
+        let redirectUrl = credentialsObject.timviec.redirect_uris[0];
         let oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
         const token = await fs.readFileSync(TOKEN_PATH_TV);
         let tokenInit = JSON.parse(token);
@@ -238,7 +255,6 @@ async function getChannel(
             if (err) {
                 console.log("The API returned an error: " + err);
             }
-            // console.log(response.data);
             const videoId = response.data.id;
             console.log("uploading video " + videoId);
             const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
@@ -254,18 +270,20 @@ async function getChannel(
             fs.unlink(videoFilePath, (err) => {
                 if (err) return null;
             });
+
             let tweet_content = {
                 text: `${title} Link-bai-viet: ${videoLink}`,
             };
+            console.log("start uploading twitter");
             await tw.tweet(com_name, id, tweet_content);
-            let tag = "ViecLam";
-            await fb.postFb(com_name, id, title, tag, videoLink);
+            console.log("start uploading facebook");
+            await fb.postFb(com_name, title, videoLink, id);
         }
     );
 }
 
-async function filterVideoAi(data, res, auth, index) {
-    if (index < 3) {
+async function filterVideoAi(data, auth, index) {
+    if (index < data.length) {
         await getChannel(
             data[index].link_server,
             auth,
@@ -275,7 +293,7 @@ async function filterVideoAi(data, res, auth, index) {
             data[index].com_name
         );
         setTimeout(() => {
-            filterVideoAi(data, res, auth, index + 1);
+            filterVideoAi(data, auth, index + 1);
         }, 60000);
     }
 }
@@ -286,11 +304,12 @@ exports.run = async (req, res, next) => {
             com_name: com_name,
             status_server: 0,
         });
-        console.log(data);
+        console.log("start uploading");
         let auth = await authorizeTest(credentialsObject, com_name);
-        filterVideoAi(data, res, auth, 0);
+
+        filterVideoAi(data, auth, 0);
         res.status(200).send({
-            message: "ok",
+            message: "start uploading",
         });
     } catch (err) {
         return functions.setError(res, err.message);

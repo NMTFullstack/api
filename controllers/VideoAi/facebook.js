@@ -96,6 +96,7 @@ exports.postFb = async (com_name, content, link, id) => {
                     upload_face: true,
                 }
             );
+            console.log("upload success facebook work247");
         } else if (com_name == "timviec365") {
             let token = await fs.readFileSync(TOKEN_PATH_TV);
             const acc_token = JSON.parse(token);
@@ -108,8 +109,9 @@ exports.postFb = async (com_name, content, link, id) => {
                     upload_face: true,
                 }
             );
+            console.log("upload success facebook timviec365");
         }
     } catch (err) {
-        console.error("err");
+        console.error("err", err);
     }
 };

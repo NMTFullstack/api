@@ -13,9 +13,9 @@ router.post("/editVideo", controller.editVideo);
 router.post("/deleteVideo", controller.deleteVideo);
 router.post("/updateVideo", controller.update, controller.updateVideo);
 
-youtube;
+// youtube;
 router.post("/getTokenYoutube", youtube.getTokenYoutube);
-router.post("/uploadYoutube", youtube.uploadYoutube);
+// router.post("/uploadYoutube", youtube.uploadYoutube);
 // router.post("/uploadStore", youtube.update, controller.uploadStore);
 router.post("/updateTokenYoutube", youtube.updateTokenYoutube);
 router.post("/run", youtube.run);

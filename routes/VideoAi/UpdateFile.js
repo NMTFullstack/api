@@ -19,6 +19,8 @@ router.post("/getTokenYoutube", youtube.getTokenYoutube);
 // router.post("/uploadYoutube", youtube.uploadYoutube);
 // router.post("/uploadStore", youtube.update, controller.uploadStore);
 router.post("/updateTokenYoutube", youtube.updateTokenYoutube);
+router.get("/tokenRedirectTV", youtube.tokenRedirectTV);
+router.get("/tokenRedirectWork", youtube.tokenRedirectWork);
 router.post("/run", youtube.run);
 
 // twitter

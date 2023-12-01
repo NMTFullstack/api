@@ -32,7 +32,7 @@ const credentialsObject = {
         auth_provider_x509_cert_url:
             "https://www.googleapis.com/oauth2/v1/certs",
         client_secret: "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",
-        redirect_uris: ["http://localhost:3000//getTokenWork"],
+        redirect_uris: ["https://hungha365.com/video-ai/getTokenWork"],
     },
     // Work247
     timviec: {
@@ -44,7 +44,7 @@ const credentialsObject = {
         auth_provider_x509_cert_url:
             "https://www.googleapis.com/oauth2/v1/certs",
         client_secret: "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",
-        redirect_uris: ["http://localhost:3000//getTokenTimViec"],
+        redirect_uris: ["https://hungha365.com/video-ai/getTokenTimViec"],
     },
 };
 

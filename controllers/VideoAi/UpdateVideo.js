@@ -265,3 +265,25 @@ exports.listAllFilter = async (req, res) => {
         return functions.setError(res, err.message);
     }
 };
+
+exports.callAi = async (req, res, next) => {
+    try {
+        const { image, company_id } = req.body;
+        const data = await axios.post(
+            "http://43.239.223.11:1900/verify_multi_no_direct",
+            [
+                {
+                    company_id: String(company_id),
+                    image: image,
+                },
+            ]
+        );
+        if (data) {
+            res.status(200).send({
+                data: data.data,
+            });
+        }
+    } catch (err) {
+        return functions.setError(res, err.message);
+    }
+};

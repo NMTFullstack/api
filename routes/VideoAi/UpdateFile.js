@@ -12,6 +12,7 @@ router.post("/listAllFilter", formData.parse(), controller.listAllFilter);
 router.post("/editVideo", controller.editVideo);
 router.post("/deleteVideo", controller.deleteVideo);
 router.post("/updateVideo", controller.update, controller.updateVideo);
+router.post("/callAi", controller.callAi);
 
 // youtube;
 router.post("/getTokenYoutube", youtube.getTokenYoutube);

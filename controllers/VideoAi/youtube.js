@@ -42,7 +42,7 @@ const credentialsObject = {
     token_uri: "https://oauth2.googleapis.com/token",
     auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
     client_secret: "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",
-    redirect_uris: ["http://localhost:8000/api/qlc/videoai/test"],
+    redirect_uris: ["http://localhost:8000/api/qlc/videoai/tokenRedirectTV"],
     javascript_origins: [
       "http://localhost",
       "http://localhost:5000",
@@ -287,8 +287,12 @@ async function getChannel(
 
 async function filterVideoAi(data, auth, index) {
   if (index < data.length) {
+    const newPath = data[index].link_server.replace(
+      "../storage/base365",
+      "https://api.timviec365.vn"
+    );
     await getChannel(
-      data[index].link_server,
+      newPath,
       auth,
       data[index].title,
       data[index].description,
